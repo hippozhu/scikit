@@ -1,20 +1,31 @@
 #!/usr/bin/python
 
 from scikit import *
-#from scikit import Dataset, Result, Report, cv
 
-datafile = 'diabetes/pima-indians-diabetes.data'
+'''
+datafile = '/home/yzhu7/data/diabetes/pima-indians-diabetes.data'
 nfeature = 8
+'''
+#datafile = '/home/yzhu7/data/ionosphere/ionosphere.data'
+#nfeature = 34
 data = np.loadtxt(datafile, delimiter=',', usecols=xrange(nfeature))
 target = np.loadtxt(datafile, delimiter=',', usecols=[-1], dtype=np.int32)
-pima=Dataset(data, target)
-pima.saling()
+dataset=Dataset(data, target)
+dataset.saling()
+
+result = Result(len(target))
 
 clf = neighbors.KNeighborsClassifier(5, weights='uniform')
-report_knn=cv(pima.data, pima.target, clf, pima.kfold(10))
+report_knn = Report('knn', clf)
+report_knn.cv(dataset)
+result.addReport(report_knn)
 
-clf = svm.SVC(kernel='linear', C=1000)
-report_svm=cv(pima.data, pima.target, clf, pima.kfold(10))
+clf = svm.SVC(kernel='linear', C=10)
+report_svm = Report('svm', clf)
+report_svm.cv(dataset)
+result.addReport(report_svm)
 
 clf = tree.DecisionTreeClassifier()
-report_dt=cv(pima.data, pima.target, clf, pima.kfold(10))
+report_dt = Report('dt', clf)
+report_dt.cv(dataset)
+result.addReport(report_dt)
