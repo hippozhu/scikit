@@ -45,8 +45,8 @@ toolbox.register("individual", tools.initRepeat, creator.Individual,
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
 def myevaluate(individual):
-  beta = 0.4
-  weight = 0.5
+  beta = 0.8
+  weight = 0.8
   rep = [i for i in xrange(len(individual)) if individual[i]==1]
   #return dataset.purity(rep) - beta * math.sqrt((len(rep) - dataset.nclass)/float(dataset.ninst)),
   return dataset.weightedPurity(rep, weight) - beta * math.sqrt((len(rep) - dataset.nclass)/float(dataset.ninst)),
@@ -64,7 +64,7 @@ toolbox.register("select", tools.selTournament, tournsize=3)
 random.seed(64)
 
 pop = toolbox.population(n=300)
-CXPB, MUTPB, NGEN = 0.5, 0.2, 10
+CXPB, MUTPB, NGEN = 0.5, 0.2, 50
 
 print("Start of evolution")
 
@@ -115,10 +115,7 @@ for g in range(NGEN):
   sum2 = sum(x*x for x in fits)
   std = abs(sum2 / length - mean**2)**0.5
 
-  print("  Min %s" % min(fits))
-  print("  Max %s" % max(fits))
-  print("  Avg %s" % mean)
-  print("  Std %s" % std)
+  print("  Min %s, Max %s, Avg %s, Std %s" % (min(fits), max(fits), mean, std))
 
   best_ind = tools.selBest(pop, 1)[0]
   myevaluate(best_ind)
@@ -127,5 +124,6 @@ for g in range(NGEN):
 print("-- End of (successful) evolution --")
 
 best_ind = tools.selBest(pop, 1)[0]
-print("Best individual is %s, %s" % (best_ind, best_ind.fitness.values))
+#print("Best individual is %s, %s" % (best_ind, best_ind.fitness.values))
+print("Best individual fitness %s" % (best_ind.fitness.values))
 

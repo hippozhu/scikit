@@ -1,6 +1,6 @@
 #!/usr/bin/python
 from sklearn.datasets.mldata import fetch_mldata
-from sklearn import svm, metrics, neighbors, tree, preprocessing
+from sklearn import svm, metrics, neighbors, naive_bayes, tree, preprocessing
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.neighbors import NearestNeighbors
 from sklearn.grid_search import GridSearchCV
@@ -8,8 +8,10 @@ from sklearn.svm import SVC
 import numpy as np
 from scipy.spatial.distance import *
 
+from sc import *
+
 class Dataset:
-  def __init__(self, data, target, nc, nf):
+  def __init__(self, data, target, nc, nf, nfold):
     #self.data = np.loadtxt(datafile, delimiter=',', usecols=xrange(nfeature))
     # target has to be 0's or 1's
     #self.target = np.loadtxt(datafile, delimiter=',', usecols=[-1], dtype=np.int32)
@@ -19,7 +21,9 @@ class Dataset:
     self.nfeature = nf
     self.ninst = len(target)
     self.base = self.baseline(self.target) 
-    self.skf = StratifiedKFold(self.target, 10)
+    #self.skf = StratifiedKFold(self.target, 10)
+    self.nfold = nfold
+    self.skf = StratifiedKFold(self.target, self.nfold)
     self.dm = None
 
   def saling(self):
@@ -68,6 +72,7 @@ class Dataset:
     self.misIded = 0
     self.clusterSize = []
     self.clusterCrux = []
+    self.cruxPurity = []
     for r in rep:
       memberIdx = [i for i in xrange(self.ninst) if nn[i] == r]
       self.clusterSize.append(len(memberIdx))
@@ -78,6 +83,7 @@ class Dataset:
 	self.ided += sum(memberTarget)
 	self.misIded += len(memberTarget) - sum(memberTarget)
 	self.clusterCrux.append(1)
+	self.cruxPurity.append(p)
       else:
         purity += (1-w)*(1-p)
 	self.clusterCrux.append(0)
@@ -90,6 +96,8 @@ class Dataset:
     print "crux : %s, %s" %(len(cruxSize), np.mean(cruxSize))
     print "non  : %s, %s" %(len(nonCruxSize), np.mean(nonCruxSize))
     print "Improved: %s-%s=%s" % (self.ided, self.misIded, self.ided-self.misIded)
+    print cruxSize, np.mean(cruxSize)
+    print ["%0.3f" % i for i in self.cruxPurity], "%0.3f" % np.mean(self.cruxPurity)
     
 class Result:
   def __init__(self, n):
@@ -107,6 +115,9 @@ class Result:
   def cruxness(self, c):
     return [i for i in xrange(len(self.crux)) if self.crux[i] == c]
 
+  def nonCruxness(self, c):
+    return [i for i in xrange(len(self.crux)) if self.crux[i] != c]
+
   def outputCruxness(self, c, filename):
     cruxness = [[1] if self.crux[i] >= c else [0] for i in xrange(len(self.crux))]
     np.savetxt(filename, cruxness, fmt="%d")
@@ -119,11 +130,29 @@ class Report:
     self.index = np.array([], dtype=np.int32)
     self.expected = np.array([], dtype=np.int32)
     self.predicted = np.array([], dtype=np.int32)
+    self.crux_pred = np.array([], dtype=np.int32)
     self.mis = None
     self.hit = None
     self.crux = None
 
   def cv(self, dataset):
+    dc = Dataclean(dataset.nclass, dataset.nfeature)
+    for train, test in dataset.skf:
+      self.index = np.append(self.index, test)
+      self.expected = np.append(self.expected, dataset.target[test])
+      '''
+      dc.fitData(dataset.data[train], dataset.target[train], dataset.nfold-1)
+      noncrux = dc.cleanedData()
+      self.clf.fit(dataset.data[train][noncrux], dataset.target[train][noncrux])
+      '''
+      self.clf.fit(dataset.data[train], dataset.target[train])
+      train_pred = self.clf.predict(dataset.data[train])
+      test_pred = self.clf.predict(dataset.data[test])
+      mysc = SupervisedClustering(dataset.data[train], train_pred != dataset.target[train], dataset.data[test], test_pred != dataset.target[test])
+      best_ind = runGA(mysc)
+      self.predicted = np.append(self.predicted, self.clf.predict(dataset.data[test]))
+
+  def cv1(self, dataset):
     for train, test in dataset.skf:
       self.index = np.append(self.index, test)
       self.expected = np.append(self.expected, dataset.target[test])
@@ -160,35 +189,24 @@ class Report:
     cruxness = [[1] if self.predicted[i]!=self.expected[i] else [0] for i in xrange(len(self.index))]
     np.savetxt(filename, cruxness, fmt="%d")
 
+class Dataclean:
+  def __init__(self, nc, nf):
+    self.nclass = nc
+    self.nfeature = nf
+    self.clfs = []
+    self.clfs.append(('knn', neighbors.KNeighborsClassifier(5, weights='uniform')))
+    self.clfs.append(('svm', svm.SVC(kernel='linear', C=10)))
+    self.clfs.append(('dt', tree.DecisionTreeClassifier()))
+    self.clfs.append(('nb', naive_bayes.GaussianNB()))
 
-'''
-set000=setknn.intersection(setdt.intersection(setsvm))
-mis_list = svm.missed()
-np.mean(np.average(distances[mis_list, 1:2], axis=1))
-np.std(np.average(distances[mis_list, 1:2], axis=1))
-mis_dist = np.average(distances[mis_list, 1:2], axis=1)
-np.histogram(mis_dist, bins=[0,1,2,3,4,5,6,7,8,9,10])
+  def fitData(self, d, t, nfold):
+    self.result = Result(len(t))
+    for cname, clf in self.clfs:
+      ds = Dataset(d, t, self.nclass, self.nfeature, nfold)
+      report = Report(cname, clf)
+      report.cv1(ds)
+      self.result.addReport(report)
 
-if __name__=="__main__":
-  #clf = svm.SVC(kernel='rbf', C=10, gamma=0.001)
-  #clf = neighbors.KNeighborsClassifier(5, weights='uniform')
-  #cv(bc.data, target, clf, skf);
-  bc = fetch_mldata('uci-20070111-breast-w', data_home='~/data', data_name=0,target_name='Class')
-  target = np.array([0 if bc.target[i]=='benign' else 1 for i in xrange(len(bc.target))], dtype=np.int32)
-  skf = StratifiedKFold(target, 10)
+  def cleanedData(self):
+    return self.result.nonCruxness(len(self.clfs))
 
-  clf = neighbors.KNeighborsClassifier(5, weights='uniform')
-  report_knn=cv(bc.data, target, clf, skf)
-  clf = svm.SVC(kernel='rbf', C=10, gamma=0.001)
-  report_svm=cv(bc.data, target, clf, skf)
-  clf = tree.DecisionTreeClassifier()
-  report_dt=cv(bc.data, target, clf, skf)
-
-  nbrs = NearestNeighbors(n_neighbors=6, algorithm='ball_tree').fit(bc.data)
-  distances, indices = nbrs.kneighbors(bc.data)
-
-  result = Result(len(target))
-  result.addReport(report_svm)
-  result.addReport(report_knn)
-  result.addReport(report_dt)
-'''
