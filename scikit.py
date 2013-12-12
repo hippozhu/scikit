@@ -153,11 +153,15 @@ class Report:
       self.predicted = np.append(self.predicted, self.clf.predict(dataset.data[test]))
 
   def cv1(self, dataset):
+    self.train_hit = 0
+    self.train_mis = 0
     for train, test in dataset.skf:
       self.index = np.append(self.index, test)
       self.expected = np.append(self.expected, dataset.target[test])
       self.clf.fit(dataset.data[train], dataset.target[train])
       self.predicted = np.append(self.predicted, self.clf.predict(dataset.data[test]))
+      self.train_hit += sum(self.clf.predict(dataset.data[train]) == dataset.target[train])
+      self.train_mis += sum(self.clf.predict(dataset.data[train]) != dataset.target[train])
 
   def missed(self):
     if self.mis == None:
@@ -176,8 +180,10 @@ class Report:
     
   def accuracy(self):
     acc = 1.0*len(self.hitted())/(len(self.hitted())+len(self.missed()))
-    print self.cname, acc, '(', len(self.hitted()),':', len(self.missed()),')'
-    #return acc
+    train_acc = self.train_hit/float(self.train_hit+self.train_mis)
+    #print self.cname, acc, '(', len(self.hitted()),':', len(self.missed()),')'
+    print "%s test : %.2f%% (%d,%d)" %(self.cname, 100*acc, len(self.hitted()), len(self.missed()))
+    print "%s train: %.2f%% (%d,%d)" %(self.cname, 100*train_acc, self.train_hit, self.train_mis)
 
   def report(self):
     print("Classification report for classifier %s:\n%s\n" % (self.clf, metrics.classification_report(self.expected, self.predicted)))
@@ -210,3 +216,26 @@ class Dataclean:
   def cleanedData(self):
     return self.result.nonCruxness(len(self.clfs))
 
+class Classification:
+  def __init__(self, data_train, target_train, data_test, target_test):
+    self.data_train = data_train
+    self.target_train = target_train
+    self.data_test = data_test
+    self.target_test = target_test
+
+  def classify(self, clf):
+    clf.fit(self.data_train, self.target_train)
+    pred_train = clf.predict(self.data_train)
+    pred_test = clf.predict(self.data_test)
+    self.hit_train = [i for i in xrange(len(self.target_train)) if pred_train[i] == self.target_train[i]]
+    self.mis_train = [i for i in xrange(len(self.target_train)) if pred_train[i] != self.target_train[i]]
+    self.hit_test = [i for i in xrange(len(self.target_test)) if pred_test[i] == self.target_test[i]]
+    self.mis_test = [i for i in xrange(len(self.target_test)) if pred_test[i] != self.target_test[i]]
+
+  def accuracy(self):
+    acc_train = len(self.hit_train)/float(len(self.hit_train)+len(self.mis_train))
+    acc_test = len(self.hit_test)/float(len(self.hit_test)+len(self.mis_test))
+    #print self.cname, acc, '(', len(self.hitted()),':', len(self.missed()),')'
+    print "train: %.2f%% (%d,%d)" %(100*acc_train, len(self.hit_train), len(self.mis_train))
+    print "test : %.2f%% (%d,%d)" %(100*acc_test, len(self.hit_test), len(self.mis_test))
+    
